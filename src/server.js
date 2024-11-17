@@ -50,7 +50,7 @@ app.use(bodyParser.json());
 app.use(express.json());
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173", // Allow requests only from this URL
+    origin: process.env.CLIENT_URL || "http://localhost:5173", // Use CLIENT_URL from env
     credentials: true, // Allow credentials (cookies, HTTP authentication, etc.)
   })
 );
