@@ -85,21 +85,6 @@ app.use(
 );
 
 // Get user info (IP, geo-location)
-app.get("/user-info", (req, res) => {
-  const ip = req.clientIp;
-  const geo = geoip.lookup(ip);
-
-  const userInfo = {
-    ip: ip || "Unknown",
-    city: (geo && geo.city) || "Unknown",
-    country: (geo && geo.country) || "Unknown",
-    region: (geo && geo.region) || "Unknown",
-    latitude: (geo && geo.ll && geo.ll[0]) || "Unknown",
-    longitude: (geo && geo.ll && geo.ll[1]) || "Unknown",
-  };
-
-  res.json(userInfo);
-});
 
 // Routes
 app.use("/api/v1/auth", authRoutes);

@@ -1,5 +1,7 @@
 const User = require("../model/user.model");
 const bcrypt = require("bcryptjs");
+const requestIp = require("request-ip");
+const geoip = require("geoip-lite");
 
 const { sendVerificationEmail } = require("../services/email.service");
 const { generateOtp } = require("../utils/generateToken");
@@ -10,6 +12,17 @@ const image = require("../model/image.model");
 const registerUser = async (req, res) => {
   try {
     const { name, username, email, password } = req.body;
+    const ip = req.clientIp;
+    const geo = geoip.lookup(ip);
+
+    const userInformation = {
+      ip: ip || "Unknown",
+      city: (geo && geo.city) || "Unknown",
+      country: (geo && geo.country) || "Unknown",
+      region: (geo && geo.region) || "Unknown",
+      latitude: (geo && geo.ll && geo.ll[0]) || "Unknown",
+      longitude: (geo && geo.ll && geo.ll[1]) || "Unknown",
+    };
 
     //check if user is already exists or not
     const isUserExists = await User.findOne({ $or: [{ username }, { email }] });
@@ -39,6 +52,7 @@ const registerUser = async (req, res) => {
       email,
       password: hashedPassword,
       otp,
+      userInformation,
     });
 
     await createdUser.save();
@@ -69,7 +83,17 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const ip = req.clientIp;
+    const geo = geoip.lookup(ip);
 
+    const userInformation = {
+      ip: ip || "Unknown",
+      city: (geo && geo.city) || "Unknown",
+      country: (geo && geo.country) || "Unknown",
+      region: (geo && geo.region) || "Unknown",
+      latitude: (geo && geo.ll && geo.ll[0]) || "Unknown",
+      longitude: (geo && geo.ll && geo.ll[1]) || "Unknown",
+    };
     // Check if email and password are provided
     if (!email || !password) {
       return res.status(400).json({
@@ -108,6 +132,10 @@ const loginUser = async (req, res) => {
     // Remove password from user object before sending response
     const userWithoutPassword = existingUser.toObject();
     delete userWithoutPassword.password;
+
+    await User.findByIdAndUpdate(existingUser._id, {
+      userInformation,
+    });
 
     res.status(200).json({
       success: true,

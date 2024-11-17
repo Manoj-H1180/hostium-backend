@@ -1,6 +1,33 @@
 const mongoose = require("mongoose");
 const { Schema } = require("mongoose");
 
+const userInfo = new Schema({
+  ip: {
+    type: String,
+    required: true,
+  },
+  city: {
+    type: String,
+    required: true,
+  },
+  country: {
+    type: String,
+    required: true,
+  },
+  region: {
+    type: String,
+    required: true,
+  },
+  latitude: {
+    type: String,
+    required: true,
+  },
+  longitude: {
+    type: String,
+    required: true,
+  },
+});
+
 const userSchema = new Schema(
   {
     name: {
@@ -45,6 +72,7 @@ const userSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    userInformation: userInfo,
   },
   {
     timestamps: true,
