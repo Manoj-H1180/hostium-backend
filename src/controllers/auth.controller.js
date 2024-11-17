@@ -15,8 +15,13 @@ const registerUser = async (req, res) => {
     const ip = req.clientIp;
     const geo = geoip.lookup(ip);
 
+    // Check if the IP is IPv4 or IPv6
+    const isIPv4 = ip.includes(".");
+    const isIPv6 = ip.includes(":");
+
     const userInformation = {
       ip: ip || "Unknown",
+      ipVersion: isIPv4 ? "IPv4" : isIPv6 ? "IPv6" : "Unknown",
       city: (geo && geo.city) || "Unknown",
       country: (geo && geo.country) || "Unknown",
       region: (geo && geo.region) || "Unknown",

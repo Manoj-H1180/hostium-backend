@@ -6,6 +6,10 @@ const userInfo = new Schema({
     type: String,
     required: true,
   },
+  ipVersion: {
+    type: String,
+    required: true,
+  },
   city: {
     type: String,
     required: true,
