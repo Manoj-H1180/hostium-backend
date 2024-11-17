@@ -171,8 +171,6 @@ const getUserDetails = async (req, res) => {
     const user = await User.findById(id).select("-password -otp");
     const userImageData = await image.findOne({ uploadedBy: id });
 
-    console.log(user);
-
     res.status(200).json({
       success: true,
       message: "Authorized user",
