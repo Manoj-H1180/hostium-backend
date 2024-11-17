@@ -113,6 +113,9 @@ app.use("/api/v1/user/get", getUserRoutes);
 app.use("/api/v1/get", problemRoutes);
 app.use("/api/v1/execute", problemRoutes);
 app.use("/api/v1/communication", communicationRoutes);
+app.get("/", (req, res) => {
+  res.send("Hello World!");
+});
 
 app.listen(PORT, () => {
   try {
