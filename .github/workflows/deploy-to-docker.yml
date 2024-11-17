@@ -1,0 +1,37 @@
+name: Deploy to Docker
+
+on:
+  push:
+    branches:
+      - main # Trigger deployment on pushes to the main branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }} # Store Docker Hub username as a secret
+          password: ${{ secrets.DOCKER_PASSWORD }} # Store Docker Hub password as a secret
+
+      - name: Build Docker Image
+        run: |
+          docker build -t myusername/myapp:${{ github.sha }} .  # Replace with your Docker Hub username and app name
+
+      - name: Push Docker Image
+        run: |
+          docker push myusername/myapp:${{ github.sha }}  # Replace with your Docker Hub username and app name
+
+      - name: Deploy to Docker Server (Optional)
+        run: |
+          ssh -o StrictHostKeyChecking=no user@yourserver.com "docker pull myusername/myapp:${{ github.sha }} && docker run -d myusername/myapp:${{ github.sha }}"  # Replace with your server details
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }} # Store your SSH private key as a secret
