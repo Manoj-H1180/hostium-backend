@@ -3,7 +3,7 @@ const vm2 = require("vm2");
 const runJavaScriptCode = (code, funcName, testCases) => {
   const wrapCode = `
   ${code}
-  const output = ${funcName}(${testCases});
+  const output = ${funcName}(${JSON.stringify(testCases)});
   console.log(output);
   `;
 

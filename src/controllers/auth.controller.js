@@ -148,13 +148,19 @@ const loginUser = async (req, res) => {
       userInformation,
     });
 
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production" ? true : false,
+      maxAge: 24 * 60 * 60 * 1000, // 1 days
+    });
+
     res.status(200).json({
       success: true,
       message: "Login successful",
       data: {
         user: userWithoutPassword,
-        token,
       },
+      token,
     });
   } catch (error) {
     console.error(`Login error: ${error}`);

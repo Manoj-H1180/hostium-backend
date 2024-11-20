@@ -61,6 +61,10 @@ const userSchema = new Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+    plan: {
+      type: String,
+      default: "free",
+    },
     // token: {
     //   type: String,
     // },
