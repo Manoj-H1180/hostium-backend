@@ -1,4 +1,5 @@
 const Problem = require("../model/problems.model");
+const User = require("../model/user.model");
 const { runJavaScriptCode } = require("../services/codeExecution");
 const { saveCodeToFile, runTestCases } = require("../services/testService");
 const { runCodeInDocker } = require("../services/dockerService");
@@ -42,16 +43,32 @@ const problemController = async (req, res) => {
 const getAllProblems = async (req, res) => {
   try {
     const problems = await Problem.find();
+
+    const userId = req.userInfo.id;
+
+    // Filter the problems to include user-specific data
+    const filteredProblems = problems.map((problem) => {
+      if (problem.solvedBy && problem.solvedBy.toString() !== userId) {
+        return {
+          ...problem.toObject(),
+          isSolved: false,
+          solvedBy: null,
+          sollution: "",
+        };
+      }
+      return problem;
+    });
+
     res.status(200).json({
       success: true,
       message: "Problems fetched",
-      problems,
-      user: req.userInfo,
+      problems: filteredProblems,
     });
   } catch (error) {
     res.status(400).json({
       success: false,
       message: "Error getting problems",
+      error,
     });
   }
 };
@@ -60,7 +77,24 @@ const getSpecificProblem = async (req, res) => {
   try {
     const id = req.params.id;
 
+    // Fetch problem details
     const problem = await Problem.findById(id);
+
+    if (!problem) {
+      return res.status(404).json({
+        success: false,
+        message: "Problem not found",
+      });
+    }
+
+    // Hide sensitive data if the current user is not the solver
+    const userId = req.userInfo.id;
+    if (problem.solvedBy && problem.solvedBy.toString() !== userId) {
+      problem.isSolved = false;
+      problem.solvedBy = null;
+      problem.sollution = "";
+    }
+
     res.status(200).json({
       success: true,
       message: "Problem fetched",
@@ -69,7 +103,8 @@ const getSpecificProblem = async (req, res) => {
   } catch (error) {
     res.status(400).json({
       success: false,
-      message: "Unable to find problem, problem not exists",
+      message: "Unable to fetch the problem",
+      error,
     });
   }
 };
@@ -144,13 +179,50 @@ const runCode = async (req, res) => {
         let solved =
           executionResults[index].expected === testCases[index].expected;
         if (solved) {
-          const updateProblem = await Problem.findByIdAndUpdate(id, {
-            isSolved: true,
-            solvedBy: req.userInfo._id,
-            sollution: code,
-          });
+          const userId = req.userInfo.id;
 
-          await updateProblem.save();
+          // Ensure the difficulty is valid and lowercase it for the increment field
+          const validDifficulties = ["Easy", "Medium", "Hard"];
+          if (!validDifficulties.includes(problem.difficulty)) {
+            throw new Error("Invalid problem difficulty");
+          }
+
+          const incrementField = `solvedProblemCount.${problem.difficulty.toLowerCase()}`;
+
+          // Check if the problem has already been solved by the user
+          const user = await User.findById(userId);
+          const alreadySolved = user.solvedProblems.some(
+            (solvedProblem) =>
+              solvedProblem.problemId.toString() === problem._id.toString()
+          );
+
+          if (!alreadySolved) {
+            // Update user's solved problems and increment the count for the difficulty
+            const updateProblem = await User.findByIdAndUpdate(
+              userId,
+              {
+                $addToSet: {
+                  solvedProblems: {
+                    problemId: problem._id,
+                    problemName: problem.title,
+                    problemDifficulty: problem.difficulty,
+                    problemSolvedDate: new Date(),
+                    problemSolvedTime: new Date().toLocaleTimeString(),
+                  },
+                },
+                $inc: {
+                  [incrementField]: 1,
+                },
+              },
+              { new: true } // Return the updated user document
+            );
+
+            if (!updateProblem) {
+              throw new Error("Failed to update user data.");
+            }
+          } else {
+            console.log("Problem already solved by the user. No update made.");
+          }
         }
       }
     }

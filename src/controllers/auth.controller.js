@@ -48,7 +48,7 @@ const registerUser = async (req, res) => {
 
     //creating jwt token
 
-    const token = generateJWTToken(username, email);
+    const token = generateJWTToken(isUserExists);
 
     //inserting or creating user into database
     const createdUser = new User({
@@ -88,7 +88,9 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const ip = req.clientIp;
+    const ip = req.headers["x-forwarded-for"] || "127.0.0.1";
+    console.log(ip);
+
     const geo = geoip.lookup(ip);
 
     // Check if the IP is IPv4 or IPv6

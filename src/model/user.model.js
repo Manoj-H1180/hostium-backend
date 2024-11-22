@@ -1,90 +1,30 @@
 const mongoose = require("mongoose");
-const { Schema } = require("mongoose");
+const { Schema } = mongoose;
 
-const userInfo = new Schema({
-  ip: {
+const SolvedProblemSchema = new Schema({
+  problemId: { type: Schema.Types.ObjectId, ref: "Problem", required: true },
+  problemName: { type: String, required: true },
+  problemDifficulty: {
     type: String,
+    enum: ["Easy", "Medium", "Hard"],
     required: true,
   },
-  ipVersion: {
-    type: String,
-    required: true,
-  },
-  city: {
-    type: String,
-    required: true,
-  },
-  country: {
-    type: String,
-    required: true,
-  },
-  region: {
-    type: String,
-    required: true,
-  },
-  latitude: {
-    type: String,
-    required: true,
-  },
-  longitude: {
-    type: String,
-    required: true,
+  problemSolvedDate: { type: Date, required: true },
+  problemSolvedTime: { type: String, required: true },
+});
+
+const UserSchema = new Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  solvedProblems: [SolvedProblemSchema],
+  solvedProblemCount: {
+    easy: { type: Number, default: 0 },
+    medium: { type: Number, default: 0 },
+    hard: { type: Number, default: 0 },
   },
 });
 
-const userSchema = new Schema(
-  {
-    name: {
-      type: String,
-      required: [true, "Name is required"],
-      trim: true,
-    },
-    username: {
-      type: String,
-      required: [true, "username required"],
-      unique: true,
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, "Email is required"],
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
-    password: {
-      type: String,
-      required: [true, "Password is required"],
-    },
-    role: {
-      type: String,
-      enum: ["user", "admin"],
-      default: "user",
-    },
-    plan: {
-      type: String,
-      default: "free",
-    },
-    // token: {
-    //   type: String,
-    // },
-    lastLogin: {
-      type: Date,
-      default: Date.now,
-    },
-    otp: {
-      type: String,
-      trim: false,
-    },
-    verified: {
-      type: Boolean,
-      default: false,
-    },
-    userInformation: userInfo,
-  },
-  {
-    timestamps: true,
-  }
-);
+const User = mongoose.model("User", UserSchema);
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = User;
