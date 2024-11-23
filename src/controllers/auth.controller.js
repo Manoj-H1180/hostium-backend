@@ -89,7 +89,6 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     const ip = req.headers["x-forwarded-for"] || "127.0.0.1";
-    console.log(ip);
 
     const geo = geoip.lookup(ip);
 
@@ -159,9 +158,7 @@ const loginUser = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Login successful",
-      data: {
-        user: userWithoutPassword,
-      },
+
       token,
     });
   } catch (error) {

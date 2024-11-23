@@ -1,12 +1,9 @@
 const Problem = require("../model/problems.model");
 const User = require("../model/user.model");
-const { runJavaScriptCode } = require("../services/codeExecution");
-const { saveCodeToFile, runTestCases } = require("../services/testService");
+const Image = require("../model/image.model");
 const { runCodeInDocker } = require("../services/dockerService");
 const { successResponse, errorResponse } = require("../utils/response");
 const { functionRegexes } = require("../utils/regex");
-const fs = require("fs");
-const path = require("path");
 
 //add problems api
 const problemController = async (req, res) => {
@@ -46,6 +43,13 @@ const getAllProblems = async (req, res) => {
 
     const userId = req.userInfo.id;
 
+    const userDetails = await User.findById(userId).select(
+      "solvedProblems name email username avatarImage"
+    );
+
+    const imgDetails = await Image.find({ uploadedBy: userId }).select(
+      "url uploadedBy"
+    );
     // Filter the problems to include user-specific data
     const filteredProblems = problems.map((problem) => {
       if (problem.solvedBy && problem.solvedBy.toString() !== userId) {
@@ -63,6 +67,8 @@ const getAllProblems = async (req, res) => {
       success: true,
       message: "Problems fetched",
       problems: filteredProblems,
+      user: userDetails,
+      imgDetails,
     });
   } catch (error) {
     res.status(400).json({
@@ -121,12 +127,12 @@ const runCode = async (req, res) => {
   const { code, language, id, testCases } = req.body;
 
   // Validate required fields
-  if (!code || !language || !id || !testCases) {
+  if (!code || !language || !id || !testCases || !Array.isArray(testCases)) {
     return res
       .status(400)
       .json(
         errorResponse(
-          "Missing required fields: code, language, id, or testCases"
+          "Missing or invalid fields: code, language, id, or testCases"
         )
       );
   }
@@ -141,100 +147,92 @@ const runCode = async (req, res) => {
       return res.status(404).json(errorResponse("Problem not found"));
     }
 
-    let executionResults = []; // Store the results for each test case
+    let executionResults = [];
 
-    // Execute the code for JavaScript or other languages
-    if (language === "javascript") {
-      // Loop through test cases for JavaScript
-      for (let i = 0; i < testCasesList.length; i++) {
-        const testCaseInput = testCasesList[i];
-        const result = await runJavaScriptCode(code, funcName, testCaseInput);
-        executionResults.push({
+    // Execute the code based on the language
+    executionResults = await Promise.all(
+      testCasesList.map(async (testCaseInput, index) => {
+        const result = await runCodeInDocker(code, language, testCaseInput);
+        const expected = testCases[index].expected;
+        return {
           input: testCaseInput,
-          expected: testCases[i].expected,
+          expected,
           output: result.output,
-          result: result.output === testCases[i].expected ? "Passed" : "Failed",
-        });
-        isProblemSolved = result.output === testCases[i].expected;
-      }
-    } else {
-      // Execute other languages using Docker
-      executionResults = await Promise.all(
-        testCasesList.map(async (testCaseInput, index) => {
-          const result = await runCodeInDocker(code, language, testCaseInput);
-          return {
-            input: testCaseInput,
-            expected: testCases[index].expected,
-            output: result.output,
-            result:
-              result.output === testCases[index].expected ? "Passed" : "Failed",
-          };
-        })
-      );
+          result: result.output === expected ? "Passed" : "Failed",
+        };
+      })
+    );
+
+    // Check if the problem is solved (all test cases passed)
+    const isProblemSolved = executionResults.every(
+      (result) => result.result === "Passed"
+    );
+
+    if (isProblemSolved) {
+      await updateUserSolvedProblem(req.userInfo.id, problem);
     }
 
-    //update data if problem is solved
-    for (const [index, result] of executionResults.entries()) {
-      if (result.result === "Passed") {
-        let solved =
-          executionResults[index].expected === testCases[index].expected;
-        if (solved) {
-          const userId = req.userInfo.id;
-
-          // Ensure the difficulty is valid and lowercase it for the increment field
-          const validDifficulties = ["Easy", "Medium", "Hard"];
-          if (!validDifficulties.includes(problem.difficulty)) {
-            throw new Error("Invalid problem difficulty");
-          }
-
-          const incrementField = `solvedProblemCount.${problem.difficulty.toLowerCase()}`;
-
-          // Check if the problem has already been solved by the user
-          const user = await User.findById(userId);
-          const alreadySolved = user.solvedProblems.some(
-            (solvedProblem) =>
-              solvedProblem.problemId.toString() === problem._id.toString()
-          );
-
-          if (!alreadySolved) {
-            // Update user's solved problems and increment the count for the difficulty
-            const updateProblem = await User.findByIdAndUpdate(
-              userId,
-              {
-                $addToSet: {
-                  solvedProblems: {
-                    problemId: problem._id,
-                    problemName: problem.title,
-                    problemDifficulty: problem.difficulty,
-                    problemSolvedDate: new Date(),
-                    problemSolvedTime: new Date().toLocaleTimeString(),
-                  },
-                },
-                $inc: {
-                  [incrementField]: 1,
-                },
-              },
-              { new: true } // Return the updated user document
-            );
-
-            if (!updateProblem) {
-              throw new Error("Failed to update user data.");
-            }
-          } else {
-            console.log("Problem already solved by the user. No update made.");
-          }
-        }
-      }
-    }
     // Return the results for all test cases
-
     return res
       .status(200)
       .json(successResponse(executionResults, "Code executed successfully"));
   } catch (err) {
+    console.error("Error during code execution:", err);
     return res
       .status(500)
-      .json(errorResponse(err.message, "Failed to execute code"));
+      .json(errorResponse(err.message || "Failed to execute code"));
+  }
+};
+
+/**
+ * Updates the user's solved problems if the problem is solved.
+ */
+const updateUserSolvedProblem = async (userId, problem) => {
+  try {
+    const validDifficulties = ["Easy", "Medium", "Hard"];
+    if (!validDifficulties.includes(problem.difficulty)) {
+      throw new Error("Invalid problem difficulty");
+    }
+
+    const incrementField = `solvedProblemCount.${problem.difficulty.toLowerCase()}`;
+
+    // Fetch user and check if the problem is already solved
+    const user = await User.findById(userId);
+    const alreadySolved = user.solvedProblems.some(
+      (solvedProblem) =>
+        solvedProblem.problemId.toString() === problem._id.toString()
+    );
+
+    if (!alreadySolved) {
+      // Update user's solved problems and increment the count for the difficulty
+      const updateProblem = await User.findByIdAndUpdate(
+        userId,
+        {
+          $addToSet: {
+            solvedProblems: {
+              problemId: problem._id,
+              problemName: problem.title,
+              problemDifficulty: problem.difficulty,
+              problemSolvedDate: new Date(),
+              problemSolvedTime: new Date().toLocaleTimeString(),
+            },
+          },
+          $inc: {
+            [incrementField]: 1,
+          },
+        },
+        { new: true }
+      );
+
+      if (!updateProblem) {
+        throw new Error("Failed to update user data.");
+      }
+    } else {
+      console.log("Problem already solved by the user. No update made.");
+    }
+  } catch (err) {
+    console.error("Error updating user's solved problems:", err);
+    throw err;
   }
 };
 
