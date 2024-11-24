@@ -1,0 +1,56 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build and export Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: hostium-backend:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/hostium-backend.tar
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Copy Docker image to DigitalOcean droplet
+        env:
+          HOST: ${{ secrets.DROPLET_HOST }}
+          USERNAME: ${{ secrets.DROPLET_USERNAME }}
+          SSH_KEY: ${{ secrets.DROPLET_SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_KEY" > private_key && chmod 600 private_key
+          scp -o StrictHostKeyChecking=no -i private_key /tmp/hostium-backend.tar ${USERNAME}@${HOST}:~/hostium-backend.tar
+          rm -f private_key
+
+      - name: Deploy to DigitalOcean
+        env:
+          HOST: ${{ secrets.DROPLET_HOST }}
+          USERNAME: ${{ secrets.DROPLET_USERNAME }}
+          SSH_KEY: ${{ secrets.DROPLET_SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_KEY" > private_key && chmod 600 private_key
+          ssh -o StrictHostKeyChecking=no -i private_key ${USERNAME}@${HOST} << EOF
+            docker load < ~/hostium-backend.tar
+            docker stop hostium-backend || true
+            docker rm hostium-backend || true
+            docker run -d --name hostium-backend -p 8000:8000 --restart unless-stopped hostium-backend:${{ github.sha }}
+            docker image prune -af
+          EOF
+          rm -f private_key
