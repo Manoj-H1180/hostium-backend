@@ -1,22 +1,38 @@
-version: "3.8"
+name: Deploy Server
 
-services:
-  app:
-    build: .
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}" # Maps PORT to the container's PORT (default 8000)
-    env_file:
-      - .env # Loads environment variables from the .env file
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock # Mount Docker socket
-    environment:
-      - PORT=${PORT} # Optional, this can be removed if already in .env
-      - MONGO_URI=${MONGO_URI}
-      - TOKEN_EXPIRY=${TOKEN_EXPIRY}
-      - TOKEN_SECRET=${TOKEN_SECRET}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - CLIENT_URL=${CLIENT_URL}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - SESSION_SECRET=${SESSION_SECRET}
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-to-server:
+    steps:
+      - name: Build docker image
+        run: |
+          docker build -t hostium-backend:${{ github.sha }} .
+
+      - name: Save docker image as tar
+        run: |
+          docker save hostium-backend:${{ github.sha }} -o hostium-backend.tar
+          chmod 644 demo-server.tar
+
+      - name: Copy docker image to droplet
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{secrets.HOST}}
+          username: ${{secrets.USERNAME}}
+          key: ${{secrets.KEY}}
+          source: hostium-backend.tar
+          target: ~/images
+
+      - name: Load the docker image run
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{secrets.HOST}}
+          username: ${{secrets.USERNAME}}
+          key: ${{secrets.KEY}}
+          script: |
+            docker load -i /root/images/hostium-backend.tar
+            docker rm -f hostium-backend
+            docker run -d -p 8000:8000 --name hostium-backend hostium-backend:${{ github.sha }}
